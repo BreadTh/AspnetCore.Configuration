@@ -31,7 +31,8 @@ namespace BreadTh.AspNet.Configuration
         }
 
         protected abstract void SpecificConfigureServices(IServiceCollection serviceCollection);
-        protected abstract void SpecificConfigure(IApplicationBuilder applicationBuilder, IServiceProvider serviceProvider);
+        protected abstract void EarlyBuild(IApplicationBuilder applicationBuilder, IServiceProvider serviceProvider);
+        protected abstract void LateBuild(IApplicationBuilder applicationBuilder, IServiceProvider serviceProvider);
 
         public void ConfigureServices(IServiceCollection serviceCollection)
         {
@@ -58,8 +59,10 @@ namespace BreadTh.AspNet.Configuration
 
         public void Configure(IApplicationBuilder applicationBuilder, IServiceProvider serviceProvider)
         {
-            if (_environment.EnvironmentName != "Production")
-                applicationBuilder.UseDeveloperExceptionPage();
+            EarlyBuild(applicationBuilder, serviceProvider);
+            
+            //if (_environment.EnvironmentName != "Production")
+            //    applicationBuilder.UseDeveloperExceptionPage();
 
             if (_standardConfiguration.Http.HttpsEnabled)
             {
@@ -77,7 +80,7 @@ namespace BreadTh.AspNet.Configuration
                 AddCustomRouting(endpoints);
             });
 
-            SpecificConfigure(applicationBuilder, serviceProvider);
+            LateBuild(applicationBuilder, serviceProvider);
         }
 
         private void AddDefaultRouting(IEndpointRouteBuilder endpoints)

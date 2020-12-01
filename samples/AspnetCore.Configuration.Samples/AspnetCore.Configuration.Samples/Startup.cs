@@ -10,13 +10,19 @@ namespace AspnetCore.Configuration.Samples
 {
     public class Startup : StandardStartup
     {
-        public Startup(IConfiguration configuration, IWebHostEnvironment environment) : base(environment, configuration) { }
+        public Startup(IConfiguration configuration, IWebHostEnvironment environment) : base(environment, configuration) 
+        {
+        }
 
         override protected void SpecificConfigureServices(IServiceCollection serviceCollection)
         {
         }
 
-        override protected void SpecificConfigure(IApplicationBuilder applicationBuilder, IServiceProvider serviceProvider)
+        override protected void EarlyBuild(IApplicationBuilder applicationBuilder, IServiceProvider serviceProvider)
+        {
+        }
+
+        override protected void LateBuild(IApplicationBuilder applicationBuilder, IServiceProvider serviceProvider)
         {
         }
     }

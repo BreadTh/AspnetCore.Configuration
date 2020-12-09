@@ -61,8 +61,8 @@ namespace BreadTh.AspNet.Configuration
         {
             EarlyBuild(applicationBuilder, serviceProvider);
             
-            //if (_environment.EnvironmentName != "Production")
-            //    applicationBuilder.UseDeveloperExceptionPage();
+            if (_environment.EnvironmentName != "Production")
+                applicationBuilder.UseDeveloperExceptionPage();
 
             if (_standardConfiguration.Http.HttpsEnabled)
             {
@@ -90,6 +90,8 @@ namespace BreadTh.AspNet.Configuration
                 endpoints.MapControllerRoute(name: "noControllerGiven", pattern: "/{action=Index}", defaults: new { controller = "Default" });
                 endpoints.MapControllerRoute(name: "normalPattern", pattern: "{controller}/{action=Index}");
             }
+            else
+                endpoints.MapControllers();
         }
 
         private void AddCustomRouting(IEndpointRouteBuilder endpoints)

@@ -61,7 +61,7 @@ namespace BreadTh.AspNet.Configuration
         {
             EarlyBuild(applicationBuilder, serviceProvider);
             
-            if (_environment.EnvironmentName != "Production")
+            if (_standardConfiguration.UseDeveloperExceptionPage)
                 applicationBuilder.UseDeveloperExceptionPage();
 
             if (_standardConfiguration.Http.HttpsEnabled)

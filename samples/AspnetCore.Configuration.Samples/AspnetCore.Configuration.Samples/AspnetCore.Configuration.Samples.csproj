@@ -8,6 +8,7 @@
     <PackageLicenseFile></PackageLicenseFile>
     <RepositoryUrl></RepositoryUrl>
     <Product />
+    <Version>1.0.0.1</Version>
   </PropertyGroup>
 
   <ItemGroup>

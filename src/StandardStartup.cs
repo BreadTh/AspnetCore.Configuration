@@ -14,6 +14,7 @@ using FluffySpoon.AspNet.LetsEncrypt;
 using FluffySpoon.AspNet.LetsEncrypt.Certes;
 
 using BreadTh.AspNet.Configuration.Core;
+using System.Threading.Tasks;
 
 namespace BreadTh.AspNet.Configuration
 {
@@ -33,6 +34,7 @@ namespace BreadTh.AspNet.Configuration
         protected abstract void SpecificConfigureServices(IServiceCollection serviceCollection);
         protected abstract void EarlyBuild(IApplicationBuilder applicationBuilder, IServiceProvider serviceProvider);
         protected abstract void LateBuild(IApplicationBuilder applicationBuilder, IServiceProvider serviceProvider);
+        protected abstract Task OnUnhandledException(Exception exception, HttpContext httpContext);
 
         public void ConfigureServices(IServiceCollection serviceCollection)
         {
@@ -61,6 +63,8 @@ namespace BreadTh.AspNet.Configuration
         {
             if (_standardConfiguration.UseDeveloperExceptionPage)
                 applicationBuilder.UseDeveloperExceptionPage();
+            else
+                AddExceptionHandler(applicationBuilder);
             
             EarlyBuild(applicationBuilder, serviceProvider);
 
@@ -82,6 +86,21 @@ namespace BreadTh.AspNet.Configuration
 
             LateBuild(applicationBuilder, serviceProvider);
         }
+
+        private void AddExceptionHandler(IApplicationBuilder applicationBuilder) =>
+            _ = applicationBuilder.Use(async (HttpContext httpContext, Func<Task> next) =>
+            {
+                httpContext.Request.EnableBuffering(); 
+
+                try
+                {
+                    await next();
+                }
+                catch (Exception exception)
+                {
+                    await OnUnhandledException(exception, httpContext);
+                }
+            });
 
         private void AddDefaultRouting(IEndpointRouteBuilder endpoints)
         {

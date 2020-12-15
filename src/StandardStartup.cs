@@ -59,10 +59,10 @@ namespace BreadTh.AspNet.Configuration
 
         public void Configure(IApplicationBuilder applicationBuilder, IServiceProvider serviceProvider)
         {
-            EarlyBuild(applicationBuilder, serviceProvider);
-            
             if (_standardConfiguration.UseDeveloperExceptionPage)
                 applicationBuilder.UseDeveloperExceptionPage();
+            
+            EarlyBuild(applicationBuilder, serviceProvider);
 
             if (_standardConfiguration.Http.HttpsEnabled)
             {

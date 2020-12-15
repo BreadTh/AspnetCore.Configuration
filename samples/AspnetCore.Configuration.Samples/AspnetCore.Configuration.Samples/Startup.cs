@@ -5,6 +5,8 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
 using BreadTh.AspNet.Configuration;
+using System.Threading.Tasks;
+using Microsoft.AspNetCore.Http;
 
 namespace AspnetCore.Configuration.Samples
 {
@@ -24,6 +26,11 @@ namespace AspnetCore.Configuration.Samples
 
         override protected void LateBuild(IApplicationBuilder applicationBuilder, IServiceProvider serviceProvider)
         {
+        }
+
+        protected override async Task OnUnhandledException(Exception exception, HttpContext httpContext)
+        {
+
         }
     }
 }

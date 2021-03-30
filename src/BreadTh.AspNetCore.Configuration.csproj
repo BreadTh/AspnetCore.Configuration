@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <TargetFramework>net5.0</TargetFramework>
-    <Version>1.0.2.0</Version>
+    <Version>1.0.3.0</Version>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
     <Authors>BreadTh</Authors>
@@ -11,11 +11,12 @@
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
     <PackageProjectUrl>https://github.com/BreadTh/AspnetCore.Configuration</PackageProjectUrl>
     <RepositoryUrl>https://github.com/BreadTh/AspnetCore.Configuration</RepositoryUrl>
-    <AssemblyVersion>1.0.2.0</AssemblyVersion>
-    <FileVersion>1.0.2.0</FileVersion>
+    <AssemblyVersion>1.0.3.0</AssemblyVersion>
+    <FileVersion>1.0.3.0</FileVersion>
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="BreadTh.StronglyApied.AspNet" Version="1.0.0" />
     <PackageReference Include="FluffySpoon.AspNet.LetsEncrypt" Version="1.139.0" />
     <PackageReference Include="Microsoft.AspNetCore.Hosting.Abstractions" Version="2.2.0" />
     <PackageReference Include="Microsoft.AspNetCore.Hosting.Server.Abstractions" Version="2.2.0" />
@@ -30,10 +31,6 @@
       <Pack>True</Pack>
       <PackagePath></PackagePath>
     </None>
-  </ItemGroup>
-
-  <ItemGroup>
-    <ProjectReference Include="..\..\StronglyApied.AspNet\src\BreadTh.StronglyApied.AspNet.csproj" />
   </ItemGroup>
 
 </Project>

@@ -14,7 +14,7 @@ using BreadTh.AspNet.Configuration.Core;
 
 namespace BreadTh.AspNet.Configuration
 {
-    public class StandardHost<TStartup> where TStartup : StandardStartup
+    public class StandardHost<STARTUP> where STARTUP : StandardStartup
     {
         const SslProtocols sslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13;
         static readonly CipherSuitesPolicy ChosenCipherSuitePolicy =
@@ -56,7 +56,7 @@ namespace BreadTh.AspNet.Configuration
                     webHostBuilder.UseUrls($"http://0.0.0.0:{standardConfiguration.Http.HttpPort}");
                 }
 
-                webHostBuilder.UseStartup<TStartup>();
+                webHostBuilder.UseStartup<STARTUP>();
             });
 
             return hostBuilder.Build();

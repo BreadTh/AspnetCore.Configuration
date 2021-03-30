@@ -1,27 +1,33 @@
 ﻿using System;
 using System.Linq;
 using System.Reflection;
+using System.Threading.Tasks;
 using System.Security.Cryptography;
+using System.Collections.Generic;
+using System.Text.Encodings.Web;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 using FluffySpoon.AspNet.LetsEncrypt;
 using FluffySpoon.AspNet.LetsEncrypt.Certes;
+using BreadTh.StronglyApied.AspNet;
 
 using BreadTh.AspNet.Configuration.Core;
-using System.Threading.Tasks;
 
 namespace BreadTh.AspNet.Configuration
 {
     public abstract class StandardStartup
     {
-        readonly protected IWebHostEnvironment _environment;
-        readonly protected IConfiguration _configuration;
+        protected readonly IWebHostEnvironment _environment;
+        protected readonly IConfiguration _configuration;
         readonly StandardConfiguration _standardConfiguration;
 
         protected StandardStartup(IWebHostEnvironment environment, IConfiguration configuration) 
@@ -31,11 +37,20 @@ namespace BreadTh.AspNet.Configuration
             _standardConfiguration = _configuration.GetSection("StandardConfiguration").Get<StandardConfiguration>();
         }
 
-        protected abstract void SpecificConfigureServices(IServiceCollection serviceCollection);
-        protected abstract void EarlyBuild(IApplicationBuilder applicationBuilder, IServiceProvider serviceProvider);
-        protected abstract void LateBuild(IApplicationBuilder applicationBuilder, IServiceProvider serviceProvider);
+        protected virtual void SpecificConfigureServices(IServiceCollection serviceCollection) { }
+        protected virtual void EarlyBuild(IApplicationBuilder applicationBuilder, IServiceProvider serviceProvider) { }
+        protected virtual void LateBuild(IApplicationBuilder applicationBuilder, IServiceProvider serviceProvider) { }
+        protected virtual void BuildBetweenRoutingAndEndpoints(IApplicationBuilder applicationBuilder, IServiceProvider serviceProvider) { }
+        protected virtual void ControllerOptions(MvcOptions options) { }
+        protected virtual async Task<AuthenticateResult> OnAuthenticateAttempt(
+            HttpContext httpContext, AuthenticationScheme scheme, IServiceProvider serviceProvider) => 
+                await Task.FromResult(AuthenticateResult.Fail("Authentication not configured"));
+        protected virtual async Task OnNotAuthenticated(HttpContext context) => await Task.CompletedTask;
+        protected virtual async Task OnNotAuthorized(HttpContext context) => await Task.CompletedTask;
+        protected virtual async Task OnNotFound(HttpContext context) => await Task.CompletedTask;
         protected abstract Task OnUnhandledException(Exception exception, HttpContext httpContext);
-
+        protected abstract Task OnStronglyApiedInputBodyValidationError(HttpContext httpContext, List<ErrorDescription> errors);
+        
         public void ConfigureServices(IServiceCollection serviceCollection)
         {
             PrintEnvironment();
@@ -57,6 +72,11 @@ namespace BreadTh.AspNet.Configuration
         {
             serviceCollection.AddTransient<IHttpContextAccessor, HttpContextAccessor>();
             serviceCollection.AddSingleton<IWebHostEnvironment>(_environment);
+            serviceCollection.AddSingleton(this);
+            
+            serviceCollection.AddAuthentication("Standard")
+                .AddScheme<StandardAuthenticationOptions, StandardAuthenticationHandler>("Standard", null);
+            serviceCollection.AddHttpContextAccessor();
         }
 
         public void Configure(IApplicationBuilder applicationBuilder, IServiceProvider serviceProvider)
@@ -68,6 +88,8 @@ namespace BreadTh.AspNet.Configuration
             
             EarlyBuild(applicationBuilder, serviceProvider);
 
+            applicationBuilder.UseStronglyApiedParseErrorResponse(OnStronglyApiedInputBodyValidationError);
+
             if (_standardConfiguration.Http.HttpsEnabled)
             {
                 applicationBuilder.UseFluffySpoonLetsEncryptChallengeApprovalMiddleware();
@@ -78,6 +100,22 @@ namespace BreadTh.AspNet.Configuration
             ConfigureFrontend(applicationBuilder);
 
             applicationBuilder.UseRouting();
+
+            applicationBuilder.UseAuthentication();
+            applicationBuilder.Use(async (context, next) => 
+            {
+                await next.Invoke();
+
+                if(context.Response.StatusCode == 401)
+                    await OnNotAuthenticated(context);
+                else if(context.Response.StatusCode == 403)
+                    await OnNotAuthorized(context);
+                else if (context.Response.StatusCode is >= 404 and <= 405)
+                    await OnNotFound(context);
+            });
+
+            applicationBuilder.UseAuthorization();
+
             applicationBuilder.UseEndpoints(endpoints =>
             {
                 AddDefaultRouting(endpoints);
@@ -138,15 +176,16 @@ namespace BreadTh.AspNet.Configuration
                 ConfigureControllers(serviceCollection);
             }
             else
-                serviceCollection.AddControllers();
+                serviceCollection.AddControllers(ConfigureMvc);
         }
 
         private void ConfigureControllers(IServiceCollection serviceCollection)
         {
             if (_environment.EnvironmentName == "Development")
-                serviceCollection.AddControllersWithViews().AddRazorRuntimeCompilation();
+                serviceCollection.AddControllersWithViews(ConfigureMvc)
+                    .AddRazorRuntimeCompilation();
             else
-                serviceCollection.AddControllersWithViews();
+                serviceCollection.AddControllersWithViews(ConfigureMvc);
         }
 
         private void ConfigureCookiePolicy(IServiceCollection serviceCollection)
@@ -156,6 +195,12 @@ namespace BreadTh.AspNet.Configuration
                 options.CheckConsentNeeded = context => _standardConfiguration.Controller.DoesAnyCookieRequireConsent;
                 options.MinimumSameSitePolicy = SameSiteMode.Strict;
             });
+        }
+
+        private void ConfigureMvc(MvcOptions options)
+        {
+            options.UseStronglyApiedInputParser();
+            ControllerOptions(options);
         }
 
         private void ConfigureSessionCookies(IServiceCollection serviceCollection)
@@ -215,6 +260,29 @@ namespace BreadTh.AspNet.Configuration
             Console.WriteLine($"=============================================");
             Console.WriteLine($"     Running in environment: {_environment.EnvironmentName}");
             Console.WriteLine($"=============================================");
+        }
+
+        private class StandardAuthenticationOptions : AuthenticationSchemeOptions { };
+        
+        private class StandardAuthenticationHandler : AuthenticationHandler<StandardAuthenticationOptions>
+        {
+            IServiceProvider serviceProvider;
+            StandardStartup parent;
+            public StandardAuthenticationHandler(
+                IOptionsMonitor<StandardAuthenticationOptions> options
+            ,   ILoggerFactory logger
+            ,   UrlEncoder encoder
+            ,   ISystemClock clock
+            ,   IServiceProvider serviceProvider
+            ,   StandardStartup parent)
+                :   base(options, logger, encoder, clock)
+            {
+                this.serviceProvider = serviceProvider;
+                this.parent = parent;
+            }
+ 
+            protected override async Task<AuthenticateResult> HandleAuthenticateAsync() => 
+                await parent.OnAuthenticateAttempt(Context, Scheme, serviceProvider);
         }
     }
 }

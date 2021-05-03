@@ -106,6 +106,9 @@ namespace BreadTh.AspNet.Configuration
             {
                 await next.Invoke();
 
+                if(context.Response.HasStarted) 
+                    return; //A response has already been written. Don't try to write another.
+
                 if(context.Response.StatusCode == 401)
                     await OnNotAuthenticated(context);
                 else if(context.Response.StatusCode == 403)

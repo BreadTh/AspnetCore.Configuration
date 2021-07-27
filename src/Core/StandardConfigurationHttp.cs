@@ -9,6 +9,7 @@ namespace BreadTh.AspNet.Configuration.Core
         public string MainPublicDomain { get; set; }
         public string[] AlternativePublicDomains { get; set; }
         public StandardConfigurationCsrInfo CsrInfo { get; set; }
+        public Certificate Certificate { get; set; }
     }
 }
 #pragma warning restore CS0649

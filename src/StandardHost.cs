@@ -75,20 +75,26 @@ namespace BreadTh.AspNet.Configuration
         private static void ConfigureWebHostForHttps(IWebHostBuilder webHostBuilder, StandardConfiguration standardConfiguration)
         {
             webHostBuilder.UseUrls($"http://0.0.0.0:{standardConfiguration.Http.HttpPort}", $"https://0.0.0.0:{standardConfiguration.Http.HttpsPort}");
-            webHostBuilder.UseKestrel(kestrelOptions =>
+            webHostBuilder.UseKestrel(kestrelOptions => 
                 kestrelOptions.ConfigureHttpsDefaults(httpsOptions =>
                 {
-                    httpsOptions.ServerCertificateSelector = SslCertificateSelector;
                     httpsOptions.SslProtocols = sslProtocols;
-                    httpsOptions.OnAuthenticate = SslOptionConfigurer;
+
+                    if(standardConfiguration.Http.Certificate.GenerationMethod.ToLower() == "selfsigned")
+                    { 
+                        httpsOptions.ServerCertificateSelector = (ConnectionContext _, string _) => 
+                            new X509Certificate2(standardConfiguration.Http.Certificate.SaveAs);
+                    }
+                    else
+                    {
+                        httpsOptions.ServerCertificateSelector = (ConnectionContext _, string _) =>
+                            LetsEncryptRenewalService.Certificate;
+                        httpsOptions.OnAuthenticate = (ConnectionContext conContext, SslServerAuthenticationOptions sslAuthOptions) =>
+                            sslAuthOptions.CipherSuitesPolicy = ChosenCipherSuitePolicy;
+
+                    }
                 }));
         }
-
-        private static X509Certificate2 SslCertificateSelector(ConnectionContext c, string s) =>
-            LetsEncryptRenewalService.Certificate;
-
-        private static void SslOptionConfigurer(ConnectionContext conContext, SslServerAuthenticationOptions sslAuthOptions) =>
-            sslAuthOptions.CipherSuitesPolicy = ChosenCipherSuitePolicy;
 
         private static void ConfigureLogging(IHostBuilder hostBuilder)
         {

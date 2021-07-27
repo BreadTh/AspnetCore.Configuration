@@ -9,7 +9,6 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Routing;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -21,6 +20,8 @@ using FluffySpoon.AspNet.LetsEncrypt.Certes;
 using BreadTh.StronglyApied.AspNet;
 
 using BreadTh.AspNet.Configuration.Core;
+using System.Security.Cryptography.X509Certificates;
+using System.IO;
 
 namespace BreadTh.AspNet.Configuration
 {
@@ -40,7 +41,6 @@ namespace BreadTh.AspNet.Configuration
         protected virtual void SpecificConfigureServices(IServiceCollection serviceCollection) { }
         protected virtual void EarlyBuild(IApplicationBuilder applicationBuilder, IServiceProvider serviceProvider) { }
         protected virtual void LateBuild(IApplicationBuilder applicationBuilder, IServiceProvider serviceProvider) { }
-        protected virtual void BuildBetweenRoutingAndEndpoints(IApplicationBuilder applicationBuilder, IServiceProvider serviceProvider) { }
         protected virtual void ControllerOptions(MvcOptions options) { }
         protected virtual async Task<AuthenticateResult> OnAuthenticateAttempt(
             HttpContext httpContext, AuthenticationScheme scheme, IServiceProvider serviceProvider) => 
@@ -54,6 +54,7 @@ namespace BreadTh.AspNet.Configuration
         public void ConfigureServices(IServiceCollection serviceCollection)
         {
             PrintEnvironment();
+            serviceCollection.AddSingleton(new EnvironmentString(_environment.EnvironmentName));
             ConfigureServiceHttps(serviceCollection);
             ConfigureServicesControllers(serviceCollection);
 
@@ -92,7 +93,9 @@ namespace BreadTh.AspNet.Configuration
 
             if (_standardConfiguration.Http.HttpsEnabled)
             {
-                applicationBuilder.UseFluffySpoonLetsEncryptChallengeApprovalMiddleware();
+                if(_standardConfiguration.Http.Certificate.GenerationMethod.ToLower() != "selfsigned")
+                    applicationBuilder.UseFluffySpoonLetsEncryptChallengeApprovalMiddleware();
+
                 applicationBuilder.UseHsts();
                 applicationBuilder.UseHttpsRedirection();
             }
@@ -101,7 +104,6 @@ namespace BreadTh.AspNet.Configuration
 
             applicationBuilder.UseRouting();
 
-            applicationBuilder.UseAuthentication();
             applicationBuilder.Use(async (context, next) => 
             {
                 await next.Invoke();
@@ -115,14 +117,6 @@ namespace BreadTh.AspNet.Configuration
                     await OnNotAuthorized(context);
                 else if (context.Response.StatusCode is >= 404 and <= 405)
                     await OnNotFound(context);
-            });
-
-            applicationBuilder.UseAuthorization();
-
-            applicationBuilder.UseEndpoints(endpoints =>
-            {
-                AddDefaultRouting(endpoints);
-                AddCustomRouting(endpoints);
             });
 
             LateBuild(applicationBuilder, serviceProvider);
@@ -142,24 +136,6 @@ namespace BreadTh.AspNet.Configuration
                     await OnUnhandledException(exception, httpContext);
                 }
             });
-
-        private void AddDefaultRouting(IEndpointRouteBuilder endpoints)
-        {
-            if (_standardConfiguration.Controller.UseDefaultRoutes)
-            {
-                endpoints.MapControllerRoute(name: "noControllerGiven", pattern: "/{action=Index}", defaults: new { controller = "Default" });
-                endpoints.MapControllerRoute(name: "normalPattern", pattern: "{controller}/{action=Index}");
-            }
-            else
-                endpoints.MapControllers();
-        }
-
-        private void AddCustomRouting(IEndpointRouteBuilder endpoints)
-        {
-            if (_standardConfiguration.Controller.AdditionalRoutes != null)
-                _standardConfiguration.Controller.AdditionalRoutes.ToList().ForEach(x =>
-                    endpoints.MapControllerRoute(name: x.Name, pattern: x.Pattern, defaults: new { x.Defaults.Controller, x.Defaults.Action }));
-        }
 
         private void ConfigureFrontend(IApplicationBuilder applicationBuilder)
         {
@@ -233,28 +209,44 @@ namespace BreadTh.AspNet.Configuration
                     options.MaxAge = TimeSpan.FromDays(366);
                 });
 
-                string[] allDomains = _standardConfiguration.Http.AlternativePublicDomains ?? new string[0];
-                allDomains = allDomains.Prepend(_standardConfiguration.Http.MainPublicDomain).ToArray();
-
-                serviceCollection.AddFluffySpoonLetsEncryptRenewalService(new LetsEncryptOptions()
+                if (_standardConfiguration.Http.Certificate.GenerationMethod.ToLower() == "selfsigned")
                 {
-                    Email = _standardConfiguration.Http.CsrInfo.EmailAddress,
-                    UseStaging = false,
-                    Domains = allDomains,
-                    TimeUntilExpiryBeforeRenewal = TimeSpan.FromDays(30),
-                    TimeAfterIssueDateBeforeRenewal = TimeSpan.FromDays(7),
-                    CertificateSigningRequest = new Certes.CsrInfo()
+                    var certFileName = _standardConfiguration.Http.Certificate.SaveAs;
+                    if (File.Exists(certFileName))
                     {
-                        CountryName = _standardConfiguration.Http.CsrInfo.CountryName,
-                        Locality = _standardConfiguration.Http.CsrInfo.Locality,
-                        Organization = _standardConfiguration.Http.CsrInfo.Organization,
-                        OrganizationUnit = _standardConfiguration.Http.CsrInfo.OrganizationUnit,
-                        State = _standardConfiguration.Http.CsrInfo.State
+                        Console.WriteLine($"{certFileName} found. Using it.");
                     }
-                });
+                    else
+                    {
+                        Console.WriteLine($"{certFileName} not found. Generating it.");
+                        MakeSelfsignedCert(certFileName);
+                    }
+                }
+                else
+                {
+                    string[] allDomains = _standardConfiguration.Http.AlternativePublicDomains ?? new string[0];
+                    allDomains = allDomains.Prepend(_standardConfiguration.Http.MainPublicDomain).ToArray();
 
-                serviceCollection.AddFluffySpoonLetsEncryptFileCertificatePersistence();
-                serviceCollection.AddFluffySpoonLetsEncryptMemoryChallengePersistence();
+                    serviceCollection.AddFluffySpoonLetsEncryptRenewalService(new LetsEncryptOptions()
+                    {
+                        Email = _standardConfiguration.Http.CsrInfo.EmailAddress,
+                        UseStaging = false,
+                        Domains = allDomains,
+                        TimeUntilExpiryBeforeRenewal = TimeSpan.FromDays(30),
+                        TimeAfterIssueDateBeforeRenewal = TimeSpan.FromDays(7),
+                        CertificateSigningRequest = new Certes.CsrInfo()
+                        {
+                            CountryName = _standardConfiguration.Http.CsrInfo.CountryName,
+                            Locality = _standardConfiguration.Http.CsrInfo.Locality,
+                            Organization = _standardConfiguration.Http.CsrInfo.Organization,
+                            OrganizationUnit = _standardConfiguration.Http.CsrInfo.OrganizationUnit,
+                            State = _standardConfiguration.Http.CsrInfo.State
+                        }
+                    });
+                    serviceCollection.AddFluffySpoonLetsEncryptFileCertificatePersistence();
+                    serviceCollection.AddFluffySpoonLetsEncryptMemoryChallengePersistence();
+                
+                }
             }
         }
 
@@ -286,6 +278,19 @@ namespace BreadTh.AspNet.Configuration
  
             protected override async Task<AuthenticateResult> HandleAuthenticateAsync() => 
                 await parent.OnAuthenticateAttempt(Context, Scheme, serviceProvider);
+        }
+
+        private static void MakeSelfsignedCert(string certFilename)
+        {
+            using var rsa = RSA.Create();
+            var certRequest = new CertificateRequest("cn=test", rsa, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+
+            var subjectAlternativeNames = new SubjectAlternativeNameBuilder();
+            subjectAlternativeNames.AddDnsName("localhost");
+            certRequest.CertificateExtensions.Add(subjectAlternativeNames.Build());
+
+            X509Certificate2 certificate = certRequest.CreateSelfSigned(DateTimeOffset.Now, DateTimeOffset.Now.AddYears(10));
+            File.WriteAllBytes(certFilename, certificate.Export(X509ContentType.Pkcs12));
         }
     }
 }
